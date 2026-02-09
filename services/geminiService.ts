@@ -1,11 +1,25 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { FormData, FurnitureListResponse, ArAnalysisResponse, FocusArea } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let aiClient: GoogleGenAI | null = null;
+
+const getAiClient = (): GoogleGenAI => {
+  if (!aiClient) {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.warn("API_KEY is missing. AI features will fail.");
+    }
+    // Initialize with provided key or empty string. 
+    // We defer initialization to here so the app doesn't crash on load if key is missing.
+    aiClient = new GoogleGenAI({ apiKey: apiKey || '' });
+  }
+  return aiClient;
+};
 
 // Image Generation Service (Text to Image)
 export const generateDesignImage = async (data: FormData): Promise<string | null> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       Professional interior design architectural render.
       Style: ${data.style}.
@@ -47,6 +61,7 @@ export const generateDesignImage = async (data: FormData): Promise<string | null
 // Furniture List Generation Service
 export const generateFurnitureList = async (data: FormData): Promise<FurnitureListResponse> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       You are a professional interior decorator specializing in budget-friendly renovations.
       Generate a furniture shopping list for a home with the following specs:
@@ -110,6 +125,7 @@ export const generateFurnitureList = async (data: FormData): Promise<FurnitureLi
 // 1. Generate Renovated Image (Image Editing)
 export const generateRenovatedImage = async (base64Image: string, style: string, focusArea: FocusArea): Promise<string | null> => {
   try {
+    const ai = getAiClient();
     // Remove header if present for processing
     const cleanBase64 = base64Image.split(',')[1] || base64Image;
 
@@ -162,6 +178,7 @@ export const generateRenovatedImage = async (base64Image: string, style: string,
 // 2. Analyze Room and Provide Advice (Multimodal)
 export const analyzeRoomStyle = async (base64Image: string, targetStyle: string, focusArea: FocusArea): Promise<ArAnalysisResponse> => {
   try {
+    const ai = getAiClient();
     const cleanBase64 = base64Image.split(',')[1] || base64Image;
 
     const schema: Schema = {
