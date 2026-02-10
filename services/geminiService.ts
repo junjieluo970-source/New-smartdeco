@@ -6,14 +6,29 @@ let aiClient: GoogleGenAI | null = null;
 const getAiClient = (): GoogleGenAI => {
   if (!aiClient) {
     const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      console.warn("API_KEY is missing. AI features will fail.");
+    
+    // Explicitly check for empty key and throw a user-friendly error
+    if (!apiKey || apiKey.trim() === '') {
+      console.error("CRITICAL: API_KEY is missing in environment variables.");
+      throw new Error("API Configuration Error: 请在部署设置中添加 API_KEY 环境变量。");
     }
-    // Initialize with provided key or empty string. 
-    // We defer initialization to here so the app doesn't crash on load if key is missing.
-    aiClient = new GoogleGenAI({ apiKey: apiKey || '' });
+
+    aiClient = new GoogleGenAI({ apiKey: apiKey });
   }
   return aiClient;
+};
+
+// Helper to extract mimeType and data from base64 string
+const parseBase64 = (base64String: string) => {
+  // Check if it has the data prefix
+  if (base64String.includes(',')) {
+    const [header, data] = base64String.split(',');
+    // Extract mime type from header like "data:image/png;base64"
+    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+    return { mimeType, data };
+  }
+  // Default fallback
+  return { mimeType: 'image/jpeg', data: base64String };
 };
 
 // Image Generation Service (Text to Image)
@@ -29,6 +44,8 @@ export const generateDesignImage = async (data: FormData): Promise<string | null
       Atmosphere: Photorealistic, high quality, 8k resolution, cozy, modern furniture placement, detailed textures.
       View: Wide angle shot showing the main living area.
     `;
+
+    console.log("Generating image with prompt:", prompt);
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
@@ -51,6 +68,8 @@ export const generateDesignImage = async (data: FormData): Promise<string | null
         return `data:image/png;base64,${base64EncodeString}`;
       }
     }
+    
+    console.warn("No image data found in response. Check safety filters or model status.");
     return null;
   } catch (error) {
     console.error("Error generating image:", error);
@@ -126,8 +145,7 @@ export const generateFurnitureList = async (data: FormData): Promise<FurnitureLi
 export const generateRenovatedImage = async (base64Image: string, style: string, focusArea: FocusArea): Promise<string | null> => {
   try {
     const ai = getAiClient();
-    // Remove header if present for processing
-    const cleanBase64 = base64Image.split(',')[1] || base64Image;
+    const { mimeType, data: cleanBase64 } = parseBase64(base64Image);
 
     let prompt = `Redecorate this room in ${style} style. Make it look photorealistic.`;
     
@@ -146,13 +164,15 @@ export const generateRenovatedImage = async (base64Image: string, style: string,
         break;
     }
 
+    console.log(`Generating AR image with style: ${style}, Focus: ${focusArea}, Mime: ${mimeType}`);
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
           {
             inlineData: {
-              mimeType: 'image/jpeg',
+              mimeType: mimeType, // Use actual mime type
               data: cleanBase64
             }
           },
@@ -179,7 +199,7 @@ export const generateRenovatedImage = async (base64Image: string, style: string,
 export const analyzeRoomStyle = async (base64Image: string, targetStyle: string, focusArea: FocusArea): Promise<ArAnalysisResponse> => {
   try {
     const ai = getAiClient();
-    const cleanBase64 = base64Image.split(',')[1] || base64Image;
+    const { mimeType, data: cleanBase64 } = parseBase64(base64Image);
 
     const schema: Schema = {
       type: Type.OBJECT,
@@ -212,7 +232,7 @@ export const analyzeRoomStyle = async (base64Image: string, targetStyle: string,
         parts: [
           {
             inlineData: {
-              mimeType: 'image/jpeg',
+              mimeType: mimeType,
               data: cleanBase64
             }
           },

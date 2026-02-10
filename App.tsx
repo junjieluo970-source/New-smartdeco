@@ -5,7 +5,7 @@ import RenovationForm from './components/RenovationForm';
 import ArAssistant from './components/ArAssistant';
 import ResultsView from './components/ResultsView';
 import BackgroundMusic from './components/BackgroundMusic';
-import { LayoutTemplate, CheckCircle2, Zap, DollarSign, Instagram, Twitter, Facebook, Camera, PenTool } from 'lucide-react';
+import { LayoutTemplate, CheckCircle2, Zap, DollarSign, Instagram, Twitter, Facebook, Camera, PenTool, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [loadingState, setLoadingState] = useState<LoadingState>(LoadingState.IDLE);
@@ -38,7 +38,10 @@ const App: React.FC = () => {
       setLoadingState(LoadingState.COMPLETED);
     } catch (err: any) {
       console.error(err);
-      setError("抱歉，生成方案时遇到了一些问题。请稍后重试。");
+      const errorMessage = err.message?.includes("API_KEY") 
+        ? "配置错误: 缺少 API Key。请在部署设置中配置环境变量。" 
+        : "抱歉，生成方案时遇到了一些问题。请稍后重试。";
+      setError(errorMessage);
       setLoadingState(LoadingState.ERROR);
     }
   };
@@ -223,16 +226,19 @@ const App: React.FC = () => {
              <div className="container mx-auto px-6">
                 
                 {error && (
-                  <div className="max-w-2xl mx-auto mb-8 p-6 bg-white text-red-600 rounded-xl shadow-sm border border-red-100 flex items-center gap-4">
-                    <div className="p-2 bg-red-100 rounded-full">!</div>
+                  <div className="max-w-2xl mx-auto mb-8 p-6 bg-red-50 text-red-700 rounded-xl shadow-sm border border-red-200 flex items-start gap-4">
+                    <div className="p-2 bg-red-100 rounded-full flex-shrink-0">
+                       <AlertTriangle className="w-5 h-5" />
+                    </div>
                     <div>
-                       <p className="font-semibold">{error}</p>
-                       <button onClick={reset} className="text-sm underline mt-1 hover:text-red-800">返回重试</button>
+                       <h4 className="font-bold text-lg mb-1">出错了</h4>
+                       <p className="text-sm opacity-90">{error}</p>
+                       <button onClick={reset} className="text-sm font-semibold underline mt-3 hover:text-red-900">返回重试</button>
                     </div>
                   </div>
                 )}
 
-                {(loadingState === LoadingState.GENERATING_IMAGE || loadingState === LoadingState.GENERATING_LIST) && !result.imageUrl && (
+                {(loadingState === LoadingState.GENERATING_IMAGE || loadingState === LoadingState.GENERATING_LIST) && !result.imageUrl && !error && (
                   <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
                     <div className="relative">
                       <div className="w-24 h-24 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
@@ -245,7 +251,7 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                {loadingState === LoadingState.GENERATING_LIST && result.imageUrl && (
+                {loadingState === LoadingState.GENERATING_LIST && result.imageUrl && !error && (
                    <div className="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
                       <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
                       <h3 className="text-xl font-bold text-slate-800">正在计算最优家具预算...</h3>
@@ -253,7 +259,7 @@ const App: React.FC = () => {
                    </div>
                 )}
 
-                {(result.imageUrl || result.furnitureData) && (
+                {(result.imageUrl || result.furnitureData) && !error && (
                   <ResultsView result={result} loadingState={loadingState} reset={reset} />
                 )}
              </div>
