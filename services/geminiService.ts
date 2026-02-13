@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { FormData, FurnitureListResponse, ArAnalysisResponse, FocusArea } from "../types";
+import { FormData, FurnitureListResponse, AnalysisResult } from "../types";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -7,7 +7,6 @@ const getAiClient = (): GoogleGenAI => {
   if (!aiClient) {
     const apiKey = process.env.API_KEY;
     
-    // Explicitly check for empty key and throw a user-friendly error
     if (!apiKey || apiKey.trim() === '') {
       console.error("CRITICAL: API_KEY is missing in environment variables.");
       throw new Error("API Configuration Error: 请在部署设置中添加 API_KEY 环境变量。");
@@ -16,19 +15,6 @@ const getAiClient = (): GoogleGenAI => {
     aiClient = new GoogleGenAI({ apiKey: apiKey });
   }
   return aiClient;
-};
-
-// Helper to extract mimeType and data from base64 string
-const parseBase64 = (base64String: string) => {
-  // Check if it has the data prefix
-  if (base64String.includes(',')) {
-    const [header, data] = base64String.split(',');
-    // Extract mime type from header like "data:image/png;base64"
-    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-    return { mimeType, data };
-  }
-  // Default fallback
-  return { mimeType: 'image/jpeg', data: base64String };
 };
 
 // Image Generation Service (Text to Image)
@@ -61,7 +47,6 @@ export const generateDesignImage = async (data: FormData): Promise<string | null
       }
     });
 
-    // Extract image from response
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
         const base64EncodeString = part.inlineData.data;
@@ -69,7 +54,7 @@ export const generateDesignImage = async (data: FormData): Promise<string | null
       }
     }
     
-    console.warn("No image data found in response. Check safety filters or model status.");
+    console.warn("No image data found in response.");
     return null;
   } catch (error) {
     console.error("Error generating image:", error);
@@ -77,45 +62,55 @@ export const generateDesignImage = async (data: FormData): Promise<string | null
   }
 };
 
-// Furniture List Generation Service
+// Furniture List Generation Service (Smart Budget & Comparison)
 export const generateFurnitureList = async (data: FormData): Promise<FurnitureListResponse> => {
   try {
     const ai = getAiClient();
     const prompt = `
-      You are a professional interior decorator specializing in budget-friendly renovations.
-      Generate a furniture shopping list for a home with the following specs:
-      - Layout: ${data.layout}
-      - Area: ${data.area} sqm
-      - Orientation: ${data.orientation}
-      - Style: ${data.style}
+      You are an expert interior cost estimator.
+      Generate a furniture shopping list for: ${data.style} style, ${data.area} sqm.
       
-      Goal: Provide the CHEAPEST yet stylish furniture options that fit this specific style.
-      Output: A structured JSON object containing a list of essential items, their estimated low-end market price in CNY (Chinese Yuan), and a brief buying tip.
-      Also include a brief design advice summary.
+      Goal: Smart Budgeting. Provide a price range (Min/Max) for each item to help with price comparison.
+      
+      Output JSON with:
+      1. List of items.
+      2. For each item:
+         - priceMin: Low end market price (CNY)
+         - priceMax: High end market price (CNY)
+         - estimatedPrice: Average price (CNY)
+         - searchQuery: Specific search term to find this item online (e.g. "北欧极简布艺沙发 米白色")
+      3. Total costs calculated.
     `;
 
     const schema: Schema = {
       type: Type.OBJECT,
       properties: {
-        totalEstimatedCost: { type: Type.NUMBER, description: "Total sum of all estimated prices" },
-        currency: { type: Type.STRING, description: "Currency code, e.g., CNY" },
-        designAdvice: { type: Type.STRING, description: "A short paragraph of design advice for this specific room configuration." },
+        totalEstimatedCost: { type: Type.NUMBER, description: "Sum of average prices" },
+        totalMinCost: { type: Type.NUMBER, description: "Sum of min prices" },
+        totalMaxCost: { type: Type.NUMBER, description: "Sum of max prices" },
+        currency: { type: Type.STRING, description: "CNY" },
+        designAdvice: { type: Type.STRING },
         items: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
-              category: { type: Type.STRING, description: "Category like Sofa, Table, Lamp" },
-              name: { type: Type.STRING, description: "Generic name of the item" },
-              description: { type: Type.STRING, description: "Description of color/material fitting the style" },
-              estimatedPrice: { type: Type.NUMBER, description: "Estimated price in CNY" },
-              buyingTip: { type: Type.STRING, description: "Tip on how to find this item cheaply" }
+              category: { type: Type.STRING },
+              name: { type: Type.STRING },
+              description: { type: Type.STRING },
+              material: { type: Type.STRING },
+              dimensions: { type: Type.STRING },
+              estimatedPrice: { type: Type.NUMBER },
+              priceMin: { type: Type.NUMBER, description: "Lower bound price" },
+              priceMax: { type: Type.NUMBER, description: "Upper bound price" },
+              searchQuery: { type: Type.STRING, description: "Optimized search keyword" },
+              buyingTip: { type: Type.STRING }
             },
-            required: ["category", "name", "description", "estimatedPrice", "buyingTip"]
+            required: ["category", "name", "description", "material", "dimensions", "estimatedPrice", "priceMin", "priceMax", "searchQuery", "buyingTip"]
           }
         }
       },
-      required: ["totalEstimatedCost", "currency", "items", "designAdvice"]
+      required: ["totalEstimatedCost", "totalMinCost", "totalMaxCost", "currency", "items", "designAdvice"]
     };
 
     const response = await ai.models.generateContent({
@@ -128,10 +123,7 @@ export const generateFurnitureList = async (data: FormData): Promise<FurnitureLi
     });
 
     const jsonText = response.text;
-    if (!jsonText) {
-      throw new Error("No text returned from API");
-    }
-
+    if (!jsonText) throw new Error("No text returned");
     return JSON.parse(jsonText) as FurnitureListResponse;
   } catch (error) {
     console.error("Error generating list:", error);
@@ -139,47 +131,37 @@ export const generateFurnitureList = async (data: FormData): Promise<FurnitureLi
   }
 };
 
-// --- AR / Image Makeover Services ---
-
-// 1. Generate Renovated Image (Image Editing)
-export const generateRenovatedImage = async (base64Image: string, style: string, focusArea: FocusArea): Promise<string | null> => {
+// AR Renovation Image Service
+export const generateRenovatedImage = async (base64Image: string, style: string, focusArea: string): Promise<string | null> => {
   try {
     const ai = getAiClient();
-    const { mimeType, data: cleanBase64 } = parseBase64(base64Image);
-
-    let prompt = `Redecorate this room in ${style} style. Make it look photorealistic.`;
     
-    switch (focusArea) {
-      case 'Walls & Floor':
-        prompt += ` Keep the furniture layout and items exactly as they are, but change the wall paint/wallpaper and flooring to match ${style}.`;
-        break;
-      case 'Furniture':
-        prompt += ` Keep the room structure (walls, windows, floor) exactly as they are, but replace the furniture with ${style} style furniture.`;
-        break;
-      case 'Soft Decor':
-        prompt += ` Keep the hard furniture and structure. Only change soft decorations like curtains, rugs, cushions, and art to match ${style}.`;
-        break;
-      default: // Overall Room
-        prompt += ` Keep the structural elements (walls, windows, floor shape) but update the furniture, colors, and decor to match the ${style} aesthetic perfectly.`;
-        break;
-    }
+    // Extract base64 data and mime type
+    const matches = base64Image.match(/^data:(.+);base64,(.+)$/);
+    let mimeType = 'image/png';
+    let data = base64Image;
+    if (matches) { mimeType = matches[1]; data = matches[2]; }
 
-    console.log(`Generating AR image with style: ${style}, Focus: ${focusArea}, Mime: ${mimeType}`);
+    const prompt = `
+      Renovate this room interior.
+      Target Style: ${style}.
+      Focus Area: ${focusArea}.
+      Instructions: 
+      1. Keep structural elements.
+      2. Redecorate ${focusArea} to match ${style}.
+      3. High quality photorealistic render.
+    `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: mimeType, // Use actual mime type
-              data: cleanBase64
-            }
-          },
-          {
-            text: prompt
-          }
+          { inlineData: { data, mimeType } },
+          { text: prompt }
         ]
+      },
+      config: {
+        imageConfig: { aspectRatio: "4:3" }
       }
     });
 
@@ -190,69 +172,100 @@ export const generateRenovatedImage = async (base64Image: string, style: string,
     }
     return null;
   } catch (error) {
-    console.error("Error generating AR image:", error);
+    console.error("Error generating renovated image:", error);
     throw error;
   }
 };
 
-// 2. Analyze Room and Provide Advice (Multimodal)
-export const analyzeRoomStyle = async (base64Image: string, targetStyle: string, focusArea: FocusArea): Promise<ArAnalysisResponse> => {
+// AR Room Analysis & Element Recognition Service
+export const analyzeRoomStyle = async (base64Image: string, style: string, focusArea: string): Promise<AnalysisResult> => {
   try {
     const ai = getAiClient();
-    const { mimeType, data: cleanBase64 } = parseBase64(base64Image);
+    
+    const matches = base64Image.match(/^data:(.+);base64,(.+)$/);
+    let mimeType = 'image/png';
+    let data = base64Image;
+    if (matches) { mimeType = matches[1]; data = matches[2]; }
+
+    const prompt = `
+      Analyze this room image for a renovation project to ${style} style.
+      
+      Tasks:
+      1. **Element Recognition**: Identify 3-5 existing furniture/decor items in the image. For each, state what it is, its current look, and how to change it.
+      2. **Suggestions**: 3 renovation steps.
+      3. **Colors**: 4 color palette.
+      
+      Return JSON.
+    `;
 
     const schema: Schema = {
       type: Type.OBJECT,
       properties: {
         suggestions: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "List of 3-4 specific renovation suggestions based on the focus area"
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+        },
+        detectedObjects: {
+            type: Type.ARRAY,
+            description: "List of identified items in the room",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    name: { type: Type.STRING, description: "e.g. Sofa, Curtain" },
+                    currentStyle: { type: Type.STRING, description: "Current condition/style" },
+                    suggestion: { type: Type.STRING, description: "How to replace/renovate it" },
+                    confidence: { type: Type.NUMBER, description: "0.1 to 1.0" }
+                },
+                required: ["name", "currentStyle", "suggestion", "confidence"]
+            }
         },
         colorPalette: {
-          type: Type.ARRAY,
-          items: {
-             type: Type.OBJECT,
-             properties: {
-                name: { type: Type.STRING, description: "Name of the color (e.g., Sage Green, Warm Beige)" },
-                hex: { type: Type.STRING, description: "Hex color code (e.g., #F5F5DC)" },
-                usage: { type: Type.STRING, description: "Suggested usage (e.g., Main Walls, Sofa Accent, Curtains)" }
-             },
-             required: ["name", "hex", "usage"]
-          },
-          description: "List of 4-5 curated colors that form a cohesive palette for the requested style."
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    name: { type: Type.STRING },
+                    hex: { type: Type.STRING },
+                    usage: { type: Type.STRING }
+                },
+                required: ["name", "hex", "usage"]
+            }
         }
       },
-      required: ["suggestions", "colorPalette"]
+      required: ["suggestions", "colorPalette", "detectedObjects"]
     };
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: cleanBase64
-            }
-          },
-          {
-            text: `Analyze this room photo. I want to renovate the ${focusArea} into ${targetStyle} style. Provide specific advice on what to change in the ${focusArea}. Also provide a professional color palette with hex codes and usage instructions. Return JSON.`
-          }
+            { inlineData: { data, mimeType } },
+            { text: prompt }
         ]
       },
       config: {
         responseMimeType: "application/json",
-        responseSchema: schema
-      }
+        responseSchema: schema,
+      },
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No analysis returned");
-    
-    return JSON.parse(text) as ArAnalysisResponse;
+    const jsonText = response.text;
+    if (!jsonText) throw new Error("No analysis text");
+    return JSON.parse(jsonText) as AnalysisResult;
   } catch (error) {
     console.error("Error analyzing room:", error);
-    throw error;
+    // Fallback structure
+    return {
+        suggestions: ["Improve lighting", "Change wall color", "Update furniture"],
+        detectedObjects: [
+            { name: "Furniture", currentStyle: "Old", suggestion: "Replace", confidence: 0.8 }
+        ],
+        colorPalette: [
+            { name: "White", hex: "#FFFFFF", usage: "Wall" },
+            { name: "Grey", hex: "#CCCCCC", usage: "Floor" },
+            { name: "Blue", hex: "#0000FF", usage: "Accent" },
+            { name: "Wood", hex: "#8B4513", usage: "Furniture" }
+        ]
+    };
   }
 };

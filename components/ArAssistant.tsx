@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Camera, Wand2, ArrowRight, RefreshCw, Palette, Copy, Check, Layers, Plus, ChevronRight, Image as ImageIcon } from 'lucide-react';
-import { ArResult, FocusArea, ColorRecommendation } from '../types';
+import { Upload, Camera, Wand2, ArrowRight, RefreshCw, Palette, Layers, Plus, ChevronRight, Image as ImageIcon, ScanEye, MousePointerClick } from 'lucide-react';
+import { ArResult, FocusArea, ColorRecommendation, DetectedObject } from '../types';
 import { generateRenovatedImage, analyzeRoomStyle } from '../services/geminiService';
 import ImageComparisonSlider from './ImageComparisonSlider';
 
@@ -20,7 +20,6 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
   // Results State
   const [results, setResults] = useState<ArResult[]>([]);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
-  const [copiedHex, setCopiedHex] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -85,12 +84,6 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
     setSelectedResultId(null);
   };
 
-  const copyToClipboard = (hex: string) => {
-    navigator.clipboard.writeText(hex);
-    setCopiedHex(hex);
-    setTimeout(() => setCopiedHex(null), 2000);
-  };
-
   // Render Control Panel (Inputs)
   const renderControls = (compact = false) => (
     <div className={`space-y-4 ${compact ? 'grid grid-cols-1 gap-4' : ''}`}>
@@ -128,7 +121,7 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
 
       <div>
         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-           <Layers className="w-4 h-4" /> 改造区域 (Focus Area)
+           <Layers className="w-4 h-4" /> 改造区域
         </label>
         <div className="grid grid-cols-2 gap-2">
           {['Overall Room', 'Walls & Floor', 'Furniture', 'Soft Decor'].map((area) => (
@@ -161,12 +154,12 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
         {isProcessing ? (
            <>
             <Wand2 className="animate-spin w-5 h-5" /> 
-            {results.length > 0 ? '生成新方案...' : '正在施展魔法...'}
+            {results.length > 0 ? '生成新方案...' : '正在分析与重绘...'}
            </>
         ) : (
            <>
             {results.length > 0 ? <Plus className="w-5 h-5" /> : <Wand2 className="w-5 h-5" />}
-            {results.length > 0 ? '生成新版本' : '开始改造'} 
+            {results.length > 0 ? '生成新版本' : '开始 AR 改造'} 
             {results.length === 0 && <ArrowRight className="w-5 h-5" />}
            </>
         )}
@@ -175,7 +168,7 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
   );
 
   return (
-    <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 w-full max-w-6xl mx-auto overflow-hidden min-h-[600px] flex flex-col">
+    <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 w-full max-w-7xl mx-auto overflow-hidden min-h-[600px] flex flex-col">
       
       {/* 1. INITIAL UPLOAD STATE */}
       {!image ? (
@@ -184,9 +177,9 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
             <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
                <Camera className="w-10 h-10 text-indigo-600" />
             </div>
-            <h2 className="text-3xl font-bold text-slate-800 tracking-tight">AR 实景改造</h2>
+            <h2 className="text-3xl font-bold text-slate-800 tracking-tight">AR 实景空间构造</h2>
             <p className="text-slate-500 mt-3 max-w-md mx-auto text-lg">
-               上传房间照片，AI 将为您生成多种风格的装修方案。支持针对墙面、家具等特定区域进行局部改造。
+               拍摄或上传房间照片，AI 将自动识别空间元素，为您生成多种风格的装修方案并提供即时改造建议。
             </p>
           </div>
 
@@ -213,7 +206,7 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
         <div className="flex flex-col lg:flex-row h-full min-h-[600px]">
            
            {/* Sidebar Controls */}
-           <div className="w-full lg:w-80 p-6 border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/50 flex flex-col overflow-y-auto max-h-[40vh] lg:max-h-full">
+           <div className="w-full lg:w-80 p-6 border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/50 flex flex-col overflow-y-auto max-h-[40vh] lg:max-h-full shrink-0">
               {renderControls()}
               
               {/* Gallery List (History) */}
@@ -254,15 +247,15 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
                       <ImageIcon className="w-10 h-10 text-slate-300" />
                     </div>
                     <p className="text-xl font-medium text-slate-500">
-                      请在左侧选择风格<br/>
-                      点击“开始改造”
+                      已就绪<br/>
+                      请点击“开始 AR 改造”以启动视觉引擎
                     </p>
                  </div>
               ) : activeResult ? (
                  <div className="flex flex-col h-full animate-fade-in">
                     
                     {/* Interactive Comparison Slider */}
-                    <div className="relative h-[400px] md:h-[550px] w-full bg-slate-900 overflow-hidden">
+                    <div className="relative h-[400px] md:h-[550px] w-full bg-slate-900 overflow-hidden flex-shrink-0">
                        {activeResult.generatedImage ? (
                          <ImageComparisonSlider 
                             beforeImage={activeResult.originalImage}
@@ -277,57 +270,78 @@ const ArAssistant: React.FC<ArAssistantProps> = ({ onResultChange }) => {
                        )}
                     </div>
 
-                    {/* Analysis Panel */}
-                    <div className="p-8 border-t border-slate-100 bg-white">
-                      <div className="mb-6 flex items-baseline justify-between">
-                         <div>
-                            <h3 className="text-2xl font-bold text-slate-800">AI 改造建议</h3>
-                            <p className="text-slate-500 mt-1">针对 <span className="font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{activeResult.focusArea}</span> 的专业优化方案</p>
-                         </div>
-                         <div className="text-xs text-slate-400 font-mono">
-                           ID: {activeResult.id.slice(-6)}
-                         </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-3 gap-8">
-                         <div className="md:col-span-2 space-y-4">
-                            {activeResult.analysis?.suggestions.map((suggestion, idx) => (
-                              <div key={idx} className="flex gap-4 text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 hover:shadow-md transition-shadow">
-                                <div className="w-8 h-8 rounded-full bg-white shadow-sm text-indigo-600 flex items-center justify-center flex-shrink-0 text-sm font-bold border border-indigo-100">
-                                  {idx + 1}
-                                </div>
-                                <p className="text-sm leading-relaxed pt-1">{suggestion}</p>
-                              </div>
-                            ))}
-                         </div>
+                    {/* Analysis & Detection Panel */}
+                    <div className="flex-grow p-8 bg-slate-50">
+                      <div className="grid lg:grid-cols-2 gap-8">
                          
-                         <div>
-                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                               <Palette className="w-4 h-4" /> 推荐配色方案
-                            </h4>
+                         {/* Element Recognition Radar */}
+                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                               <ScanEye className="w-5 h-5 text-indigo-500" />
+                               AR 空间元素识别
+                            </h3>
                             <div className="space-y-3">
-                               {activeResult.analysis?.colorPalette.map((colorItem: ColorRecommendation, idx) => (
-                                 <div 
-                                    key={idx} 
-                                    onClick={() => copyToClipboard(colorItem.hex)}
-                                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-indigo-50 cursor-pointer transition-colors border border-slate-100 hover:border-indigo-200 group bg-white shadow-sm"
-                                    title="点击复制颜色代码"
-                                 >
-                                   <div 
-                                      className="w-10 h-10 rounded-lg shadow-inner border border-black/5 flex-shrink-0" 
-                                      style={{ backgroundColor: colorItem.hex }}
-                                   ></div>
-                                   <div className="flex-grow min-w-0">
-                                     <div className="flex items-center justify-between">
-                                        <span className="font-bold text-slate-700 text-sm truncate">{colorItem.name}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                                          {copiedHex === colorItem.hex ? <Check className="w-3 h-3" /> : colorItem.hex}
-                                        </span>
-                                     </div>
-                                     <p className="text-xs text-slate-500 truncate mt-0.5">{colorItem.usage}</p>
+                              {activeResult.analysis?.detectedObjects.map((obj, idx) => (
+                                <div key={idx} className="flex items-start gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/50 hover:border-indigo-100 transition-colors">
+                                   <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                      {idx + 1}
                                    </div>
-                                 </div>
-                               ))}
+                                   <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                         <span className="font-bold text-slate-800">{obj.name}</span>
+                                         <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">
+                                            置信度 {Math.round(obj.confidence * 100)}%
+                                         </span>
+                                      </div>
+                                      <p className="text-xs text-slate-500 mb-1">当前: {obj.currentStyle}</p>
+                                      <p className="text-sm text-indigo-700 font-medium flex items-center gap-1">
+                                        <MousePointerClick className="w-3 h-3" /> 建议: {obj.suggestion}
+                                      </p>
+                                   </div>
+                                </div>
+                              ))}
+                              {(!activeResult.analysis?.detectedObjects || activeResult.analysis.detectedObjects.length === 0) && (
+                                <p className="text-slate-400 text-sm italic">未能识别出具体家具元素。</p>
+                              )}
+                            </div>
+                         </div>
+
+                         {/* Suggestions & Colors */}
+                         <div className="space-y-6">
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                               <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                  <Wand2 className="w-5 h-5 text-violet-500" />
+                                  改造施工建议
+                               </h3>
+                               <ul className="space-y-3">
+                                  {activeResult.analysis?.suggestions.map((suggestion, idx) => (
+                                    <li key={idx} className="flex gap-3 text-slate-600 text-sm">
+                                       <span className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 flex-shrink-0"></span>
+                                       {suggestion}
+                                    </li>
+                                  ))}
+                               </ul>
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                               <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                  <Palette className="w-5 h-5 text-pink-500" />
+                                  色彩搭配
+                               </h3>
+                               <div className="grid grid-cols-2 gap-3">
+                                  {activeResult.analysis?.colorPalette.map((colorItem, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 hover:bg-slate-50">
+                                       <div 
+                                          className="w-8 h-8 rounded-full border border-black/10 shadow-inner" 
+                                          style={{ backgroundColor: colorItem.hex }}
+                                       ></div>
+                                       <div className="min-w-0">
+                                          <p className="text-xs font-bold text-slate-700 truncate">{colorItem.name}</p>
+                                          <p className="text-[10px] text-slate-400 truncate">{colorItem.usage}</p>
+                                       </div>
+                                    </div>
+                                  ))}
+                               </div>
                             </div>
                          </div>
                       </div>

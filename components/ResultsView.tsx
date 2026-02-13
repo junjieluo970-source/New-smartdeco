@@ -1,6 +1,6 @@
 import React from 'react';
 import { DesignResult, LoadingState } from '../types';
-import { Download, ShoppingBag, Lightbulb, TrendingDown, Image as ImageIcon } from 'lucide-react';
+import { Download, ShoppingBag, Lightbulb, TrendingDown, Image as ImageIcon, Box, Ruler, Search, ArrowUpRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface ResultsViewProps {
@@ -23,14 +23,21 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, loadingState, reset }
     }
   };
 
+  const handleSmartSearch = (query: string) => {
+     // Redirect to Google Shopping search
+     window.open(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(query)}`, '_blank');
+  };
+
   if (!imageUrl && !furnitureData && loadingState === LoadingState.IDLE) {
     return null;
   }
 
-  // Chart Data Preparation
+  // Chart Data Preparation (Using average price)
   const chartData = furnitureData?.items.map(item => ({
     name: item.name.length > 6 ? item.name.substring(0, 6) + '..' : item.name,
-    price: item.estimatedPrice
+    price: item.estimatedPrice,
+    min: item.priceMin,
+    max: item.priceMax
   })) || [];
 
   return (
@@ -95,19 +102,21 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, loadingState, reset }
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50/50">
                   <h3 className="text-xl font-bold flex items-center gap-2 text-emerald-800">
                     <ShoppingBag className="w-5 h-5 text-emerald-600" />
-                    高性价比家具清单
+                    智能比价清单
                   </h3>
                   <div className="text-right">
-                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">预估总价</p>
+                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">预估总预算区间</p>
                     <p className="text-2xl font-black text-emerald-600">
-                      {furnitureData.currency} {furnitureData.totalEstimatedCost.toLocaleString()}
+                      <span className="text-lg text-emerald-600/70">¥{furnitureData.totalMinCost.toLocaleString()}</span>
+                      <span className="mx-1">-</span>
+                      <span>{furnitureData.totalMaxCost.toLocaleString()}</span>
                     </p>
                   </div>
                 </div>
 
                 <div className="divide-y divide-slate-100">
                   {furnitureData.items.map((item, index) => (
-                    <div key={index} className="p-6 hover:bg-slate-50 transition-colors group">
+                    <div key={index} className="p-6 hover:bg-slate-50 transition-colors group relative">
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <span className="inline-block px-2 py-1 text-xs font-semibold text-slate-500 bg-slate-100 rounded-md mb-2">
@@ -117,18 +126,45 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, loadingState, reset }
                             {item.name}
                           </h4>
                         </div>
-                        <span className="text-lg font-bold text-emerald-600 whitespace-nowrap">
-                           ¥ {item.estimatedPrice}
-                        </span>
+                        <div className="text-right">
+                           <span className="text-lg font-bold text-emerald-600 whitespace-nowrap block">
+                              ¥{item.priceMin} - {item.priceMax}
+                           </span>
+                           <span className="text-xs text-slate-400">市场参考价</span>
+                        </div>
                       </div>
-                      <p className="text-slate-600 text-sm mb-3 leading-relaxed">
+                      
+                      <p className="text-slate-600 text-sm mb-4 leading-relaxed pr-24">
                         {item.description}
                       </p>
-                      <div className="flex items-start gap-2 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-                        <TrendingDown className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-yellow-800 font-medium">
-                          <span className="font-bold">省钱攻略：</span> {item.buyingTip}
-                        </p>
+
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                         <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <Box className="w-3.5 h-3.5" />
+                            <span>{item.material}</span>
+                         </div>
+                         <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <Ruler className="w-3.5 h-3.5" />
+                            <span>{item.dimensions}</span>
+                         </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                         <div className="flex-grow flex items-start gap-2 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                           <TrendingDown className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                           <p className="text-xs text-yellow-800 font-medium">
+                             {item.buyingTip}
+                           </p>
+                         </div>
+                         
+                         <button 
+                           onClick={() => handleSmartSearch(item.searchQuery)}
+                           className="flex-shrink-0 flex items-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-200 transition-all hover:-translate-y-0.5"
+                           title="全网搜索比价"
+                         >
+                            <Search className="w-4 h-4" /> 
+                            <span>比价</span>
+                         </button>
                       </div>
                     </div>
                   ))}
@@ -151,7 +187,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, loadingState, reset }
 
             {/* Cost Chart */}
             <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
-              <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-6">预算分布</h4>
+              <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-6">成本构成分析</h4>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData}>
@@ -161,6 +197,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, loadingState, reset }
                     <Tooltip 
                       cursor={{fill: '#f1f5f9'}}
                       contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                      formatter={(value: any) => [`¥${value}`, '平均估价']}
                     />
                     <Bar dataKey="price" radius={[4, 4, 0, 0]}>
                       {chartData.map((entry, index) => (
@@ -173,7 +210,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, loadingState, reset }
             </div>
             
             <div className="bg-slate-100 rounded-xl p-4 text-xs text-slate-500 text-center">
-              免责声明：以上价格仅为AI根据市场行情预估的参考价，实际购买价格请以当地商场或电商平台为准。
+              * 点击清单中的“比价”按钮可跳转至购物搜索，获取实时优惠信息。
             </div>
           </div>
         </section>

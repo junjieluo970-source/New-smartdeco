@@ -1,21 +1,28 @@
 export interface FormData {
-  layout: string; // 户型 (e.g., "两室一厅")
-  area: number; // 平数 (sqm)
-  orientation: string; // 朝向 (e.g., "南")
-  style: string; // 风格 (e.g., "现代简约")
-  budget: string; // 预算偏好 (optional in UI, but logic uses it)
+  layout: string;
+  area: number;
+  orientation: string;
+  style: string;
+  budget: string;
 }
 
 export interface FurnitureItem {
   category: string;
   name: string;
   description: string;
-  estimatedPrice: number;
+  estimatedPrice: number; // Keep for backward compatibility/chart
+  priceMin: number; // New: Minimum market price
+  priceMax: number; // New: Maximum market price
   buyingTip: string;
+  material: string;
+  dimensions: string;
+  searchQuery: string; // New: Keyword for shopping search
 }
 
 export interface FurnitureListResponse {
   totalEstimatedCost: number;
+  totalMinCost: number; // New
+  totalMaxCost: number; // New
   currency: string;
   items: FurnitureItem[];
   designAdvice: string;
@@ -34,19 +41,27 @@ export enum LoadingState {
   ERROR = 'ERROR',
 }
 
-// New Types for AR Assistant
+// AR Assistant Types
+export type FocusArea = 'Overall Room' | 'Walls & Floor' | 'Furniture' | 'Soft Decor';
+
+export interface DetectedObject {
+  name: string;
+  currentStyle: string;
+  suggestion: string;
+  confidence: number;
+}
+
 export interface ColorRecommendation {
   name: string;
   hex: string;
   usage: string;
 }
 
-export interface ArAnalysisResponse {
-  suggestions: string[];
-  colorPalette: ColorRecommendation[];
+export interface AnalysisResult {
+    suggestions: string[];
+    colorPalette: ColorRecommendation[];
+    detectedObjects: DetectedObject[]; // New: AR Element Recognition
 }
-
-export type FocusArea = 'Overall Room' | 'Walls & Floor' | 'Furniture' | 'Soft Decor';
 
 export interface ArResult {
   id: string;
@@ -55,5 +70,13 @@ export interface ArResult {
   focusArea: FocusArea;
   originalImage: string;
   generatedImage: string | null;
-  analysis: ArAnalysisResponse | null;
+  analysis: AnalysisResult | null;
+}
+
+// Auth Types
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
 }
